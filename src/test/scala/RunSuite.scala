@@ -1,6 +1,8 @@
 import language.experimental.captureChecking
 import language.experimental.modularity
 
+import classified.{*, given}
+
 // Runtime suite that executes the safe-mode `Examples` and asserts on
 // the extracted values. This file intentionally does NOT import
 // `language.experimental.safe`, so it can use `null.asInstanceOf` to
@@ -174,3 +176,51 @@ class RunSuite extends munit.FunSuite:
   test("equalityComparesWrapperIdentity is false for two distinct wrappers") {
     assertEquals(examples.equalityComparesWrapperIdentity, false)
   }
+
+  // ----------------------------------------------------------------
+  // Section 5. Declassification
+  //
+  // Policy authoring is outside safe mode by design (see negative
+  // compile tests group F). RunSuite is non-safe mode, so it can
+  // call `Policy.apply` directly. The minted policies could equally
+  // be passed into the safe-mode `Examples` class to demonstrate the
+  // apply-in-safe path; here we exercise the runtime semantics
+  // directly.
+  // ----------------------------------------------------------------
+
+  test("declassify applies the policy's transformation") {
+    // Floor is RegionLvl (not Level) so the implicit ReadCap[Lfloor]
+    // resolution is unambiguous: only the suite's ReadCap[ChildLvl]
+    // covers RegionLvl; ReadCap[JoinL3] sits in the diamond branch.
+    val hashPolicy: Policy[RegionLvl, ChildLvl, String, Int] =
+      Policy { (s: String) => s.hashCode }
+    val secret   = Classified[ChildLvl, String]("hunter2")
+    val released = secret.declassify(hashPolicy)
+    assertEquals(released.value, "hunter2".hashCode)
+  }
+
+  test("declassify supports partial release (Child → Region, not all the way to Level)") {
+    // Source: ChildLvl. Floor: RegionLvl (still classified, just
+    // less so than Child). The result is Classified[RegionLvl, _]
+    // and remains gated by ReadCap[RegionLvl].
+    val maskPolicy: Policy[RegionLvl, ChildLvl, String, String] =
+      Policy { (s: String) => s.take(1) + "***" }
+    val secret   = Classified[ChildLvl, String]("alice@example.com")
+    val released: Classified[RegionLvl, String] = secret.declassify(maskPolicy)
+    assertEquals(released.value, "a***")
+  }
+
+  test("a release widens up the lattice via Classified's contravariance") {
+    // Policy is invariant in Lfloor (the policy is pinned to the
+    // floor it was authored at), but the *result* of declassify is a
+    // Classified[Lfloor, U] which widens up by `Classified[-L]`. So a
+    // release authored at the more-public RegionLvl can still flow
+    // into more-classified slots like ChildLvl after the policy fires.
+    val toRegion: Policy[RegionLvl, ChildLvl, Int, Int] =
+      Policy { (n: Int) => n + 1 }
+    val secret   = Classified[ChildLvl, Int](41)
+    val released: Classified[RegionLvl, Int] = secret.declassify(toRegion)
+    val asChild:  Classified[ChildLvl,  Int] = released
+    assertEquals(asChild.value, 42)
+  }
+

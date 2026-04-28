@@ -1,6 +1,8 @@
 import language.experimental.captureChecking
 import language.experimental.modularity
 
+import classified.{*, given}
+
 // Runtime behaviour observable on a `Classified` value: `toString`
 // masking, `hashCode` constancy, and `Classified.apply` trapping
 // NonFatal exceptions. The wrapper itself is opaque, so these

@@ -3,6 +3,8 @@ import language.experimental.modularity
 import language.experimental.safe
 import caps.*
 
+import classified.{*, given}
+
 // Levels mirror the original region tree. The root (was BaseRegion) is
 // the trait `Level` itself. Level traits live at top level so they can
 // be referenced by both the safe-mode `Examples` body and by the

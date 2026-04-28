@@ -35,13 +35,12 @@ object CompileHelper:
       .nn
 
   /** Compile `snippet` with the same experimental language features
-    * the library itself uses. Returns whether the snippet compiled
-    * cleanly and the captured error diagnostics.
+    * the library itself uses.
     */
   def compile(snippet: String): Result =
     val source = File.createTempFile("snippet-", ".scala")
     source.deleteOnExit()
-    Files.writeString(source.toPath, snippet)
+    Files.writeString(source.toPath, "import classified.{*, given}\n" + snippet)
 
     val outDir = Files.createTempDirectory("snippet-out-").toFile
     outDir.deleteOnExit()

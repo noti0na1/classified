@@ -1,3 +1,5 @@
+package classified
+
 import language.experimental.captureChecking
 import language.experimental.modularity
 import caps.*

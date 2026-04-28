@@ -682,3 +682,57 @@ class NegativeCompileSuite extends munit.FunSuite:
          |""".stripMargin)
     assert(!r.succeeded, "writing down to an ancestor's Ref must be rejected")
   }
+
+  // ================================================================
+  // Group F. Declassification: Policy authoring is outside safe mode
+  //
+  // `Policy.apply` is deliberately not annotated `@assumeSafe`, so
+  // safe-mode code (which is what every NegativeCompileSuite snippet
+  // runs as, because CompileHelper passes `-language:experimental.safe`)
+  // cannot mint a Policy at all. The safe-mode gate is the sole
+  // integrity check; an additional cap would be redundant since any
+  // non-safe-mode caller could forge it via `null.asInstanceOf`. The
+  // Policy must be minted in a non-safe-mode trusted module and
+  // passed in to safe-mode consumers.
+  // ================================================================
+
+  test("[safe] minting a Policy from safe-mode code is rejected") {
+    // `Policy[Outer, Inner, ...]` = floor=Outer, source=Inner; the
+    // bound `Lsrc <: Lfloor` is satisfied (Inner extends Outer), so
+    // the only thing keeping this snippet from compiling is the
+    // safe-mode rejection of the unannotated `Policy.apply`.
+    val r = CompileHelper.compile(header +
+      """|def attack: Policy[Outer, Inner, Int, Int] =
+         |  Policy { (n: Int) => n }
+         |""".stripMargin)
+    assert(!r.succeeded, "minting a Policy from safe-mode code must be rejected")
+  }
+
+  test("[type] minting a Policy whose source is more public than its floor is rejected") {
+    // Class-level bound `+Lsrc <: Lfloor` requires the source to be
+    // at least as classified as the floor. `Policy[Inner, Outer, ...]`
+    // would set floor=Inner, source=Outer, but Outer is NOT a subtype
+    // of Inner (Inner extends Outer in the level lattice), so the
+    // bound rejects it.
+    val r = CompileHelper.compile(header +
+      """|def attack: Policy[Inner, Outer, Int, Int] =
+         |  Policy { (n: Int) => n }
+         |""".stripMargin)
+    assert(!r.succeeded, "Policy[Inner, Outer, ...] must be rejected: Lsrc not <: Lfloor")
+  }
+
+  test("[type] applying a sibling-source Policy is rejected") {
+    // Policy is covariant in Lsrc (`+Lsrc <: Lfloor`), so a
+    // `Policy[Lfloor, Lsrc=LvlA, ...]` widens up the Lsrc chain — but
+    // only along subtypes. LvlA and LvlB are unrelated siblings, so
+    // `Policy[Level, LvlA, ...]` cannot stand in for the
+    // `Policy[Level, LvlB, ...]` that declassifying `Classified[LvlB, _]`
+    // would require.
+    val r = CompileHelper.compile(header +
+      """|def attack(p: Policy[Level, LvlA, Int, Int])
+         |          (using Context[Level]): Classified[Level, Int] =
+         |  val c: Classified[LvlB, Int] = Classified[LvlB, Int](7)
+         |  c.declassify(p)
+         |""".stripMargin)
+    assert(!r.succeeded, "applying a sibling-source Policy must be rejected")
+  }
