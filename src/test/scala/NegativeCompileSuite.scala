@@ -393,19 +393,6 @@ class NegativeCompileSuite extends munit.FunSuite:
     assert(!r.succeeded, "expected a compile error, got none")
   }
 
-  test("[safe] throwing a RuntimeException carrying the secret is rejected") {
-    val r = CompileHelper.compile(header +
-      """|def attack(using Context[Level]): String =
-         |  val c = Classified[LvlA, String]("secret")
-         |  try
-         |    c.map { (s: String) => (_: Context[LvlA]) ?=> throw new RuntimeException(s) }
-         |    "unreached"
-         |  catch
-         |    case e: RuntimeException => e.getMessage
-         |""".stripMargin)
-    assert(!r.succeeded, "expected a compile error, got none")
-  }
-
   test("[safe] throwing a ControlThrowable carrying the secret is rejected") {
     val r = CompileHelper.compile(header +
       """|class SafeLeak(val payload: String) extends scala.util.control.ControlThrowable
@@ -735,4 +722,24 @@ class NegativeCompileSuite extends munit.FunSuite:
          |  c.declassify(p)
          |""".stripMargin)
     assert(!r.succeeded, "applying a sibling-source Policy must be rejected")
+  }
+
+  // ================================================================
+  // Group G. Safe mode: non-@assumeSafe companion objects are
+  // inaccessible
+  //
+  // The `Level` trait carries `@assumeSafe`, but its companion
+  // `object Level` does not. Safe-mode code must not be able to call
+  // `Level.baseContext` (which forges a `Context[Level]` via
+  // `null.asInstanceOf`). The only legitimate way for safe-mode code
+  // to obtain a `Context[Level]` is as a using parameter supplied from
+  // outside safe mode.
+  // ================================================================
+
+  test("[safe] calling Level.baseContext from safe mode is rejected") {
+    val r = CompileHelper.compile(
+      """|def attack: Context[Level] =
+         |  Level.baseContext
+         |""".stripMargin)
+    assert(!r.succeeded, "calling Level.baseContext from safe mode must be rejected")
   }

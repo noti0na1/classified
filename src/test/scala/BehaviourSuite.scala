@@ -48,6 +48,17 @@ class RuntimeSuite extends munit.FunSuite:
     assertEquals(c.toString, "Classified(***)")
   }
 
+  test("Classified with captured exception and Classified with value are indistinguishable via toString/hashCode") {
+    val success = Classified[L1, Int](42)
+    val failure = Classified[L1, Int](throw new RuntimeException("secret"))
+    // Both report the same opaque toString — the exception is not observable.
+    assertEquals(success.toString, failure.toString)
+    assertEquals(success.toString, "Classified(***)")
+    // Both return constant hashCode 0 — no hash-based probing.
+    assertEquals(success.hashCode, failure.hashCode)
+    assertEquals(failure.hashCode, 0)
+  }
+
   test("implicit raise rethrows a NonFatal exception captured in the source classified") {
     // The contravariant `Classified[-L, T]` widens a `Classified[L1, T]`
     // to `Classified[L2, T]` because `L2 <: L1`. The trapped exception
